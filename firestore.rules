@@ -1,0 +1,124 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'active';
+    }
+
+    function isTrainer() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['trainer', 'admin'] &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'active';
+    }
+
+    function isActiveUser() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'active';
+    }
+
+    // ── Users ──────────────────────────────────────────────────────────────
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if isAdmin() || request.auth.uid == userId;
+      allow delete: if isAdmin();
+    }
+
+    // ── Trainer-user assignments ────────────────────────────────────────────
+    match /assignments/{docId} {
+      allow read: if isSignedIn() && (isTrainer() || resource.data.userId == request.auth.uid);
+      allow write: if isTrainer();
+    }
+
+    // ── Exercises ──────────────────────────────────────────────────────────
+    match /exercises/{exerciseId} {
+      allow read: if isActiveUser();
+      allow create: if isActiveUser();
+      allow update: if isAdmin() || (isActiveUser() && resource.data.createdBy == request.auth.uid);
+      allow delete: if isAdmin() || (isActiveUser() && resource.data.createdBy == request.auth.uid);
+    }
+
+    // ── Workout plans ──────────────────────────────────────────────────────
+    // Any active user can READ (needed to view coach-assigned templates)
+    match /workoutPlans/{planId} {
+      allow read: if isActiveUser();
+      allow create: if isActiveUser();
+      allow update: if isTrainer() || (isActiveUser() && resource.data.ownedBy == request.auth.uid);
+      allow delete: if isTrainer() || (isActiveUser() && resource.data.ownedBy == request.auth.uid);
+    }
+
+    // ── Nutrition plans ────────────────────────────────────────────────────
+    match /nutritionPlans/{planId} {
+      allow read: if isActiveUser();
+      allow create: if isActiveUser();
+      allow update: if isTrainer() || (isActiveUser() && resource.data.ownedBy == request.auth.uid);
+      allow delete: if isTrainer() || (isActiveUser() && resource.data.ownedBy == request.auth.uid);
+    }
+
+    // ── Shopping lists ─────────────────────────────────────────────────────
+    // Any active user can read (needed to view admin-assigned templates by ID)
+    match /shoppingLists/{listId} {
+      allow read: if isActiveUser();
+      allow create: if isActiveUser();
+      allow update: if isTrainer() || (isActiveUser() && resource.data.ownedBy == request.auth.uid);
+      allow delete: if isAdmin() || (isActiveUser() && resource.data.ownedBy == request.auth.uid);
+    }
+
+    // ── Shopping progress (checked items per user per list) ────────────────
+    match /shoppingProgress/{docId} {
+      allow read, write: if isActiveUser() && resource.data.userId == request.auth.uid;
+      allow create: if isActiveUser();
+    }
+
+    // ── Shopping assignments (admin assigns lists to users) ────────────────
+    match /shoppingAssignments/{docId} {
+      allow read: if isActiveUser() && (isTrainer() || resource.data.userId == request.auth.uid);
+      allow create, update: if isTrainer();
+      allow delete: if isAdmin();
+    }
+
+    // ── Workout day overrides (user swaps their daily workout) ─────────────
+    match /workoutDayOverrides/{docId} {
+      allow read: if isActiveUser() && resource.data.userId == request.auth.uid;
+      allow create: if isActiveUser();
+      allow update, delete: if isActiveUser() && resource.data.userId == request.auth.uid;
+    }
+
+    // ── Trainer invites ────────────────────────────────────────────────────
+    match /invites/{inviteId} {
+      allow read: if isSignedIn() && (
+        resource.data.trainerId == request.auth.uid ||
+        resource.data.userEmail == request.auth.token.email
+      );
+      allow create: if isTrainer();
+      allow update: if isSignedIn() && resource.data.userEmail == request.auth.token.email;
+      allow delete: if isSignedIn() && resource.data.trainerId == request.auth.uid;
+    }
+
+    // ── Body measurements ──────────────────────────────────────────────────
+    match /bodyMeasurements/{docId} {
+      allow read, write: if isActiveUser() && resource.data.userId == request.auth.uid;
+      allow create: if isActiveUser();
+    }
+
+    // ── Workout logs ───────────────────────────────────────────────────────
+    match /workoutLogs/{docId} {
+      allow read, write: if isActiveUser() && resource.data.userId == request.auth.uid;
+      allow create: if isActiveUser();
+    }
+
+    // ── Meal tracking ──────────────────────────────────────────────────────
+    match /mealTracking/{docId} {
+      allow read, write: if isActiveUser() && resource.data.userId == request.auth.uid;
+      allow create: if isActiveUser();
+      allow delete: if isActiveUser() && resource.data.userId == request.auth.uid;
+    }
+  }
+}
