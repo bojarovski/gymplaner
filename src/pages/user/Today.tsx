@@ -589,7 +589,7 @@ export default function UserToday() {
               <h2 className="text-base font-bold text-slate-900">
                 {isViewingToday ? "Today's Meals" : `${DAY_LABELS[selectedOrder - 1]}'s Meals`}
               </h2>
-              {isViewingToday && totalCalories > 0 && (
+              {totalCalories > 0 && (
                 <span className="text-xs bg-purple-50 text-purple-600 px-2 py-0.5 rounded-full flex items-center gap-1">
                   <Flame size={10} />{completedCalories}/{totalCalories} kcal
                 </span>
@@ -621,7 +621,7 @@ export default function UserToday() {
                       <p className="font-semibold text-slate-900">{selectedNutritionDay.name}</p>
                       <p className="text-xs text-slate-400 mt-0.5">{selectedNutritionDay.meals.length} meals · from {nutritionPlan.name}</p>
                     </div>
-                    {isViewingToday && totalCalories > 0 && (
+                    {totalCalories > 0 && (
                       <div className="text-right">
                         <p className="text-sm font-bold text-purple-600">{completedCalories} kcal</p>
                         <p className="text-xs text-slate-400">of {totalCalories}</p>
@@ -629,7 +629,7 @@ export default function UserToday() {
                     )}
                   </div>
 
-                  {isViewingToday && totalCalories > 0 && (
+                  {totalCalories > 0 && (
                     <div className="h-2 bg-slate-100 rounded-full mb-4 overflow-hidden">
                       <div className="h-full bg-purple-500 rounded-full transition-all duration-500" style={{ width: `${Math.min(100, (completedCalories / totalCalories) * 100)}%` }} />
                     </div>
@@ -637,18 +637,17 @@ export default function UserToday() {
 
                   <div className="space-y-2">
                     {selectedNutritionDay.meals.map((meal) => {
-                      const done = isViewingToday && completedMeals.includes(meal.id)
+                      const done = completedMeals.includes(meal.id)
                       const hasDetails = !!(meal.ingredients || meal.instructions)
                       const isOpen = expandedMeal === meal.id
                       return (
                         <div key={meal.id} className={`rounded-xl border transition-all ${done ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200'}`}>
                           <div className="flex items-center gap-3 p-3">
                             <button
-                              onClick={() => isViewingToday && toggleMeal.mutate({ mealId: meal.id, planId: nutritionPlan.id, completed: done })}
-                              disabled={!isViewingToday}
-                              className="flex-shrink-0 disabled:cursor-default"
+                              onClick={() => toggleMeal.mutate({ mealId: meal.id, planId: nutritionPlan.id, completed: done })}
+                              className="flex-shrink-0"
                             >
-                              {isViewingToday ? done ? <CheckCircle2 size={18} className="text-emerald-500" /> : <Circle size={18} className="text-slate-300" /> : <Circle size={18} className="text-slate-200" />}
+                              {done ? <CheckCircle2 size={18} className="text-emerald-500" /> : <Circle size={18} className="text-slate-300" />}
                             </button>
                             <button
                               className={`flex-1 text-left ${hasDetails ? 'cursor-pointer' : 'cursor-default'}`}

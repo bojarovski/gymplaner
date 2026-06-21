@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { signInWithPopup } from 'firebase/auth'
+import { signInWithRedirect, getRedirectResult } from 'firebase/auth'
 import { auth, googleProvider } from '../firebase'
 import { useAuthStore } from '../store/authStore'
 
@@ -19,14 +19,20 @@ export default function LoginPage() {
     }
   }, [user, loading, navigate])
 
+  useEffect(() => {
+    getRedirectResult(auth).catch(() => {
+      setError('Sign in failed. Please try again.')
+      setSigningIn(false)
+    })
+  }, [])
+
   const handleGoogleSignIn = async () => {
     setSigningIn(true)
     setError('')
     try {
-      await signInWithPopup(auth, googleProvider)
+      await signInWithRedirect(auth, googleProvider)
     } catch {
       setError('Sign in failed. Please try again.')
-    } finally {
       setSigningIn(false)
     }
   }

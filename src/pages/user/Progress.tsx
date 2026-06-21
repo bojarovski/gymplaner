@@ -227,6 +227,22 @@ export default function UserProgress() {
       .map(([monday, meals]) => ({ week: shortWeek(monday), meals }))
   }, [mealTracking])
 
+  // Monthly meal consistency (last 12 months)
+  const mealsByMonth = useMemo(() => {
+    const map: Record<string, number> = {}
+    for (const m of mealTracking) {
+      const month = m.date.slice(0, 7) // "YYYY-MM"
+      map[month] = (map[month] || 0) + 1
+    }
+    return Object.entries(map)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-12)
+      .map(([month, meals]) => ({
+        month: new Date(month + '-01').toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
+        meals,
+      }))
+  }, [mealTracking])
+
   // ── Body data ───────────────────────────────────────────────────────────────
 
   const weightData = measurements.filter((m) => m.weight).map((m) => ({
@@ -630,6 +646,25 @@ export default function UserProgress() {
                       <Tooltip contentStyle={TOOLTIP_STYLE} />
                       <Area type="monotone" dataKey="meals" stroke="#8b5cf6" strokeWidth={2} fill="url(#mealGrad)" dot={{ fill: '#8b5cf6', r: 3 }} name="Meals" />
                     </AreaChart>
+                  </ResponsiveContainer>
+                </Card>
+              )}
+
+              {/* Monthly meal volume */}
+              {mealsByMonth.length > 1 && (
+                <Card>
+                  <div className="flex items-center gap-2 mb-4">
+                    <Flame size={15} className="text-purple-500" />
+                    <h3 className="font-semibold text-slate-900">Monthly Meal Tracking</h3>
+                  </div>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <BarChart data={mealsByMonth} barSize={28}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} vertical={false} />
+                      <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#94a3b8' }} />
+                      <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} allowDecimals={false} width={28} />
+                      <Tooltip contentStyle={TOOLTIP_STYLE} />
+                      <Bar dataKey="meals" fill="#a855f7" radius={[5, 5, 0, 0]} name="Meals logged" />
+                    </BarChart>
                   </ResponsiveContainer>
                 </Card>
               )}
