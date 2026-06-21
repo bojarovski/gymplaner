@@ -289,14 +289,23 @@ export default function UserToday() {
       const rows = [...(prev[exId] ?? [])]
       rows[si] = { ...rows[si], ...patch }
       const next = { ...prev, [exId]: rows }
-      // auto-save to Firestore when a set is marked complete
-      if (patch.completed === true && planId && weekId && dayId) {
-        upsertLog(next, planId, weekId, dayId).then(() =>
-          qc.invalidateQueries({ queryKey: ['workout-log-today'] })
-        )
+      // auto-save when all sets of an exercise are complete
+      if (patch.completed !== undefined && planId && weekId && dayId) {
+        const allDone = next[exId].every((r) => r.completed)
+        if (allDone) {
+          upsertLog(next, planId, weekId, dayId).then(() =>
+            qc.invalidateQueries({ queryKey: ['workout-log-today'] })
+          )
+        }
       }
       return next
     })
+  }
+
+  const saveExercise = (tracking: ExTracking, planId: string, weekId: string, dayId: string) => {
+    upsertLog(tracking, planId, weekId, dayId).then(() =>
+      qc.invalidateQueries({ queryKey: ['workout-log-today'] })
+    )
   }
 
   // ── Render ───────────────────────────────────────────────────────────────
@@ -536,9 +545,25 @@ export default function UserToday() {
                               {rows.length} set{rows.length !== 1 ? 's' : ''} · {repsSummary} reps
                             </p>
                           </div>
-                          <span className={`text-xs font-semibold mt-0.5 flex-shrink-0 ${allDone ? 'text-emerald-600' : 'text-slate-400'}`}>
-                            {doneCount}/{rows.length}
-                          </span>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <span className={`text-xs font-semibold ${allDone ? 'text-emerald-600' : 'text-slate-400'}`}>
+                              {doneCount}/{rows.length}
+                            </span>
+                            {weekWithDay && (
+                              <button
+                                onClick={() => saveExercise(exTracking, workoutPlan.id, weekWithDay.id, effectiveWorkoutDay.id)}
+                                className={`flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-lg transition-all ${
+                                  allDone
+                                    ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                                    : 'bg-orange-50 text-orange-500 hover:bg-orange-100'
+                                }`}
+                                title="Save changes"
+                              >
+                                <Check size={11} strokeWidth={3} />
+                                Save
+                              </button>
+                            )}
+                          </div>
                         </div>
 
                         {/* Sets table */}
