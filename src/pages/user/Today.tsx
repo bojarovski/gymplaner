@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  doc, getDoc, collection, getDocs, addDoc, deleteDoc, query, where, serverTimestamp,
+  doc, getDoc, collection, getDocs, addDoc, updateDoc, deleteDoc, query, where, serverTimestamp,
 } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useAuthStore } from '../../store/authStore'
@@ -130,7 +130,7 @@ export default function UserToday() {
     enabled: !!user,
   })
 
-  const { data: workoutLogged } = useQuery({
+  const { data: workoutLog } = useQuery({
     queryKey: ['workout-log-today', user?.uid, selectedDateStr],
     queryFn: async () => {
       const q = query(
@@ -139,7 +139,8 @@ export default function UserToday() {
         where('date', '==', selectedDateStr),
       )
       const snap = await getDocs(q)
-      return !snap.empty
+      if (snap.empty) return null
+      return { docId: snap.docs[0].id }
     },
     enabled: !!user,
   })
@@ -253,30 +254,48 @@ export default function UserToday() {
     },
   })
 
-  const logWorkout = useMutation({
-    mutationFn: async ({ planId, weekId, dayId }: { planId: string; weekId: string; dayId: string }) => {
-      const loggedExercises = (effectiveWorkoutDay?.exercises ?? []).map((ex) => ({
-        exerciseId: ex.exerciseId,
-        exerciseName: ex.exerciseName,
-        sets: (exTracking[ex.id] ?? []).map((r) => ({
-          reps: r.reps !== '' ? Number(r.reps) : undefined,
-          weight: r.weight !== '' ? Number(r.weight) : undefined,
-          completed: r.completed,
-        })),
-      }))
+  const buildLoggedExercises = (tracking: ExTracking) =>
+    (effectiveWorkoutDay?.exercises ?? []).map((ex) => ({
+      exerciseId: ex.exerciseId,
+      exerciseName: ex.exerciseName,
+      sets: (tracking[ex.id] ?? []).map((r) => ({
+        reps: r.reps !== '' ? Number(r.reps) : undefined,
+        weight: r.weight !== '' ? Number(r.weight) : undefined,
+        completed: r.completed,
+      })),
+    }))
+
+  const upsertLog = async (tracking: ExTracking, planId: string, weekId: string, dayId: string) => {
+    const exercises = buildLoggedExercises(tracking)
+    if (workoutLog?.docId) {
+      await updateDoc(doc(db, 'workoutLogs', workoutLog.docId), { exercises, updatedAt: serverTimestamp() })
+    } else {
       await addDoc(collection(db, 'workoutLogs'), {
         userId: user!.uid, planId, weekId, dayId, date: selectedDateStr,
-        exercises: loggedExercises, createdAt: serverTimestamp(),
+        exercises, createdAt: serverTimestamp(),
       })
+    }
+  }
+
+  const logWorkout = useMutation({
+    mutationFn: async ({ planId, weekId, dayId }: { planId: string; weekId: string; dayId: string }) => {
+      await upsertLog(exTracking, planId, weekId, dayId)
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['workout-log-today'] }),
   })
 
-  const updateSet = (exId: string, si: number, patch: Partial<SetRow>) => {
+  const updateSet = (exId: string, si: number, patch: Partial<SetRow>, planId?: string, weekId?: string, dayId?: string) => {
     setExTracking((prev) => {
       const rows = [...(prev[exId] ?? [])]
       rows[si] = { ...rows[si], ...patch }
-      return { ...prev, [exId]: rows }
+      const next = { ...prev, [exId]: rows }
+      // auto-save to Firestore when a set is marked complete
+      if (patch.completed === true && planId && weekId && dayId) {
+        upsertLog(next, planId, weekId, dayId).then(() =>
+          qc.invalidateQueries({ queryKey: ['workout-log-today'] })
+        )
+      }
+      return next
     })
   }
 
@@ -460,7 +479,7 @@ export default function UserToday() {
                         <RefreshCw size={12} />
                         {isOverridden ? 'Changed' : 'Change'}
                       </button>
-                      {isViewingToday && !workoutLogged && (
+                      {isViewingToday && !workoutLog && (
                         <Button
                           size="sm"
                           onClick={() => {
@@ -488,6 +507,7 @@ export default function UserToday() {
                     const doneCount = rows.filter((r) => r.completed).length
                     const repsSummary = ex.sets.map((s) => s.reps ?? s.duration ?? '—').join('-')
                     const allDone = rows.length > 0 && doneCount === rows.length
+                    const weekWithDay = workoutPlan.weeks.find((w) => w.days.some((d) => d.id === effectiveWorkoutDay.id))
 
                     return (
                       <div key={ex.id} className={`border rounded-2xl overflow-hidden transition-colors ${allDone ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-white'}`}>
@@ -540,7 +560,7 @@ export default function UserToday() {
                                   <span className="text-xs text-slate-400 font-medium">{si + 1}</span>
                                   <span className="text-xs text-slate-500 font-medium">{targetVal}</span>
                                   <button
-                                    onClick={() => updateSet(ex.id, si, { completed: !row.completed })}
+                                    onClick={() => updateSet(ex.id, si, { completed: !row.completed }, workoutPlan.id, weekWithDay?.id, effectiveWorkoutDay.id)}
                                     className={`w-5 h-5 mx-auto rounded border-2 flex items-center justify-center transition-all flex-shrink-0 ${
                                       row.completed
                                         ? 'bg-orange-500 border-orange-500'
