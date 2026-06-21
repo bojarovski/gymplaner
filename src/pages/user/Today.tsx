@@ -254,8 +254,8 @@ export default function UserToday() {
     },
   })
 
-  const buildLoggedExercises = (tracking: ExTracking) =>
-    (effectiveWorkoutDay?.exercises ?? []).map((ex) => ({
+  const buildLoggedExercises = (tracking: ExTracking, day: WorkoutDay) =>
+    (day.exercises ?? []).map((ex) => ({
       exerciseId: ex.exerciseId,
       exerciseName: ex.exerciseName,
       sets: (tracking[ex.id] ?? []).map((r) => ({
@@ -265,47 +265,38 @@ export default function UserToday() {
       })),
     }))
 
-  const upsertLog = async (tracking: ExTracking, planId: string, weekId: string, dayId: string) => {
-    const exercises = buildLoggedExercises(tracking)
-    if (workoutLog?.docId) {
-      await updateDoc(doc(db, 'workoutLogs', workoutLog.docId), { exercises, updatedAt: serverTimestamp() })
-    } else {
-      await addDoc(collection(db, 'workoutLogs'), {
-        userId: user!.uid, planId, weekId, dayId, date: selectedDateStr,
-        exercises, createdAt: serverTimestamp(),
-      })
-    }
-  }
-
-  const logWorkout = useMutation({
-    mutationFn: async ({ planId, weekId, dayId }: { planId: string; weekId: string; dayId: string }) => {
-      await upsertLog(exTracking, planId, weekId, dayId)
+  const saveLog = useMutation({
+    mutationFn: async ({ tracking, planId, weekId, dayId, day }: {
+      tracking: ExTracking; planId: string; weekId: string; dayId: string; day: WorkoutDay
+    }) => {
+      const exercises = buildLoggedExercises(tracking, day)
+      if (workoutLog?.docId) {
+        await updateDoc(doc(db, 'workoutLogs', workoutLog.docId), { exercises, updatedAt: serverTimestamp() })
+      } else {
+        await addDoc(collection(db, 'workoutLogs'), {
+          userId: user!.uid, planId, weekId, dayId, date: selectedDateStr,
+          exercises, createdAt: serverTimestamp(),
+        })
+      }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['workout-log-today'] }),
   })
 
-  const updateSet = (exId: string, si: number, patch: Partial<SetRow>, planId?: string, weekId?: string, dayId?: string) => {
-    setExTracking((prev) => {
-      const rows = [...(prev[exId] ?? [])]
-      rows[si] = { ...rows[si], ...patch }
-      const next = { ...prev, [exId]: rows }
-      // auto-save when all sets of an exercise are complete
-      if (patch.completed !== undefined && planId && weekId && dayId) {
-        const allDone = next[exId].every((r) => r.completed)
-        if (allDone) {
-          upsertLog(next, planId, weekId, dayId).then(() =>
-            qc.invalidateQueries({ queryKey: ['workout-log-today'] })
-          )
-        }
+  const updateSet = (
+    exId: string, si: number, patch: Partial<SetRow>,
+    autoSave?: { planId: string; weekId: string; dayId: string; day: WorkoutDay }
+  ) => {
+    const current = exTracking[exId] ?? []
+    const newRows = [...current]
+    newRows[si] = { ...newRows[si], ...patch }
+    const next = { ...exTracking, [exId]: newRows }
+    setExTracking(next)
+    if (autoSave && patch.completed !== undefined) {
+      const allDone = newRows.every((r) => r.completed)
+      if (allDone) {
+        saveLog.mutate({ tracking: next, ...autoSave })
       }
-      return next
-    })
-  }
-
-  const saveExercise = (tracking: ExTracking, planId: string, weekId: string, dayId: string) => {
-    upsertLog(tracking, planId, weekId, dayId).then(() =>
-      qc.invalidateQueries({ queryKey: ['workout-log-today'] })
-    )
+    }
   }
 
   // ── Render ───────────────────────────────────────────────────────────────
@@ -422,7 +413,7 @@ export default function UserToday() {
                   <RefreshCw size={10} />Changed
                 </span>
               )}
-              {isViewingToday && workoutLogged && !effectiveWorkoutDay?.isRestDay && (
+              {isViewingToday && workoutLog && !effectiveWorkoutDay?.isRestDay && (
                 <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full flex items-center gap-1">
                   <CheckCircle2 size={11} />Logged
                 </span>
@@ -488,14 +479,14 @@ export default function UserToday() {
                         <RefreshCw size={12} />
                         {isOverridden ? 'Changed' : 'Change'}
                       </button>
-                      {isViewingToday && !workoutLog && (
+                      {isViewingToday && (
                         <Button
                           size="sm"
                           onClick={() => {
                             const weekWithDay = workoutPlan.weeks.find((w) => w.days.some((d) => d.id === effectiveWorkoutDay.id))
-                            if (weekWithDay) logWorkout.mutate({ planId: workoutPlan.id, weekId: weekWithDay.id, dayId: effectiveWorkoutDay.id })
+                            if (weekWithDay) saveLog.mutate({ tracking: exTracking, planId: workoutPlan.id, weekId: weekWithDay.id, dayId: effectiveWorkoutDay.id, day: effectiveWorkoutDay })
                           }}
-                          loading={logWorkout.isPending}
+                          loading={saveLog.isPending}
                         >
                           <CheckCircle2 size={14} />
                           Save Workout
@@ -551,7 +542,7 @@ export default function UserToday() {
                             </span>
                             {weekWithDay && (
                               <button
-                                onClick={() => saveExercise(exTracking, workoutPlan.id, weekWithDay.id, effectiveWorkoutDay.id)}
+                                onClick={() => saveLog.mutate({ tracking: exTracking, planId: workoutPlan.id, weekId: weekWithDay.id, dayId: effectiveWorkoutDay.id, day: effectiveWorkoutDay })}
                                 className={`flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-lg transition-all ${
                                   allDone
                                     ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
@@ -585,7 +576,7 @@ export default function UserToday() {
                                   <span className="text-xs text-slate-400 font-medium">{si + 1}</span>
                                   <span className="text-xs text-slate-500 font-medium">{targetVal}</span>
                                   <button
-                                    onClick={() => updateSet(ex.id, si, { completed: !row.completed }, workoutPlan.id, weekWithDay?.id, effectiveWorkoutDay.id)}
+                                    onClick={() => updateSet(ex.id, si, { completed: !row.completed }, weekWithDay ? { planId: workoutPlan.id, weekId: weekWithDay.id, dayId: effectiveWorkoutDay.id, day: effectiveWorkoutDay } : undefined)}
                                     className={`w-5 h-5 mx-auto rounded border-2 flex items-center justify-center transition-all flex-shrink-0 ${
                                       row.completed
                                         ? 'bg-orange-500 border-orange-500'
