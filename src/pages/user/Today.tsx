@@ -68,6 +68,7 @@ export default function UserToday() {
   const [mealsExpanded, setMealsExpanded] = useState(true)
   const [expandedMeal, setExpandedMeal] = useState<string | null>(null)
   const [exTracking, setExTracking] = useState<ExTracking>({})
+  const [savedExIds, setSavedExIds] = useState<Set<string>>(new Set())
   const [showDayPicker, setShowDayPicker] = useState(false)
 
   const weekDates = useMemo(() => getWeekDates(weekOffset), [weekOffset])
@@ -291,10 +292,13 @@ export default function UserToday() {
     newRows[si] = { ...newRows[si], ...patch }
     const next = { ...exTracking, [exId]: newRows }
     setExTracking(next)
+    setSavedExIds((prev) => { const s = new Set(prev); s.delete(exId); return s })
     if (autoSave && patch.completed !== undefined) {
       const allDone = newRows.every((r) => r.completed)
       if (allDone) {
-        saveLog.mutate({ tracking: next, ...autoSave })
+        saveLog.mutate({ tracking: next, ...autoSave }, {
+          onSuccess: () => setSavedExIds((prev) => new Set(prev).add(exId)),
+        })
       }
     }
   }
@@ -507,6 +511,7 @@ export default function UserToday() {
                     const doneCount = rows.filter((r) => r.completed).length
                     const repsSummary = ex.sets.map((s) => s.reps ?? s.duration ?? '—').join('-')
                     const allDone = rows.length > 0 && doneCount === rows.length
+                    const isSaved = savedExIds.has(ex.id)
                     const weekWithDay = workoutPlan.weeks.find((w) => w.days.some((d) => d.id === effectiveWorkoutDay.id))
 
                     return (
@@ -542,16 +547,19 @@ export default function UserToday() {
                             </span>
                             {weekWithDay && (
                               <button
-                                onClick={() => saveLog.mutate({ tracking: exTracking, planId: workoutPlan.id, weekId: weekWithDay.id, dayId: effectiveWorkoutDay.id, day: effectiveWorkoutDay })}
+                                onClick={() => saveLog.mutate(
+                                  { tracking: exTracking, planId: workoutPlan.id, weekId: weekWithDay.id, dayId: effectiveWorkoutDay.id, day: effectiveWorkoutDay },
+                                  { onSuccess: () => setSavedExIds((prev) => new Set(prev).add(ex.id)) }
+                                )}
                                 className={`flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-lg transition-all ${
-                                  allDone
-                                    ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                                  isSaved
+                                    ? 'bg-emerald-100 text-emerald-700'
                                     : 'bg-orange-50 text-orange-500 hover:bg-orange-100'
                                 }`}
                                 title="Save changes"
                               >
                                 <Check size={11} strokeWidth={3} />
-                                Save
+                                {isSaved ? 'Saved' : 'Save'}
                               </button>
                             )}
                           </div>
