@@ -98,6 +98,7 @@ export interface WorkoutExercise {
   sets: WorkoutSet[]
   notes?: string
   videoUrl?: string
+  imageUrl?: string
 }
 
 export interface WorkoutDay {

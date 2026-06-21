@@ -9,7 +9,6 @@ import TrainerLayout from './layouts/TrainerLayout'
 import UserLayout from './layouts/UserLayout'
 import AdminDashboard from './pages/admin/Dashboard'
 import AdminUsers from './pages/admin/Users'
-import AdminExercises from './pages/admin/Exercises'
 import SeedFindzzerPlan from './pages/admin/SeedFindzzerPlan'
 import AdminPlans from './pages/admin/Plans'
 import TrainerDashboard from './pages/trainer/Dashboard'
@@ -76,7 +75,6 @@ export default function App() {
       >
         <Route index element={<AdminDashboard />} />
         <Route path="users" element={<AdminUsers />} />
-        <Route path="exercises" element={<AdminExercises />} />
         <Route path="plans" element={<AdminPlans />} />
         <Route path="plans/nutrition/:id" element={<TrainerNutritionPlanDetail />} />
         <Route path="plans/workout/:id" element={<TrainerWorkoutPlanDetail />} />

@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { addDoc, collection, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuthStore } from '../store/authStore'
-import Select from './ui/Select'
 import Input from './ui/Input'
-import { Plus, ChevronDown, ChevronUp, ImageIcon, X } from 'lucide-react'
+import Select from './ui/Select'
+import { Plus, ChevronDown, ChevronUp, ImageIcon, X, Search, Dumbbell } from 'lucide-react'
 import type { Exercise } from '../types'
 
 const CATEGORIES = ['Strength', 'Cardio', 'Flexibility', 'Balance', 'HIIT', 'Olympic', 'Bodyweight']
@@ -21,6 +21,9 @@ export default function ExercisePicker({ value, onChange, exercises }: Props) {
   const { user } = useAuthStore()
   const qc = useQueryClient()
   const [creating, setCreating] = useState(false)
+  const [search, setSearch] = useState('')
+  const [open, setOpen] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
   const [form, setForm] = useState({
     name: '',
     category: 'Strength',
@@ -29,6 +32,15 @@ export default function ExercisePicker({ value, onChange, exercises }: Props) {
     imageUrl: '',
   })
   const [preview, setPreview] = useState(false)
+
+  const selected = exercises.find((e) => e.id === value)
+
+  const filtered = search.trim()
+    ? exercises.filter((e) =>
+        e.name.toLowerCase().includes(search.toLowerCase()) ||
+        e.category.toLowerCase().includes(search.toLowerCase())
+      )
+    : exercises
 
   const createExercise = useMutation({
     mutationFn: async () => {
@@ -60,35 +72,88 @@ export default function ExercisePicker({ value, onChange, exercises }: Props) {
         : [...f.muscleGroups, m],
     }))
 
+  const selectExercise = (ex: Exercise) => {
+    onChange(ex.id)
+    setSearch('')
+    setOpen(false)
+  }
+
+  const clearSelection = () => {
+    onChange('')
+    setSearch('')
+    setOpen(false)
+    setTimeout(() => inputRef.current?.focus(), 50)
+  }
+
   return (
     <div className="space-y-3">
       {!creating ? (
         <>
-          <Select
-            label="Exercise"
-            value={value}
-            onChange={onChange}
-            placeholder="Select exercise..."
-            options={exercises.map((e) => ({ value: e.id, label: `${e.name} — ${e.category}` }))}
-          />
-          {/* Show selected exercise photo if it has one */}
-          {value && (() => {
-            const ex = exercises.find((e) => e.id === value)
-            return ex?.imageUrl ? (
-              <div className="flex items-center gap-3 p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
-                <img
-                  src={ex.imageUrl}
-                  alt={ex.name}
-                  className="w-14 h-14 rounded-lg object-cover flex-shrink-0 border border-slate-200"
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
-                />
-                <div>
-                  <p className="text-sm font-medium text-slate-900">{ex.name}</p>
-                  <p className="text-xs text-slate-400">{ex.category} · {ex.muscleGroups?.join(', ')}</p>
+          <div>
+            <label className="text-sm font-medium text-[#16213E] block mb-1.5">Exercise</label>
+
+            {/* Selected state */}
+            {selected ? (
+              <div className="flex items-center gap-3 p-3 bg-[#F7F5F1] border border-[#C9A84C] rounded-xl">
+                {selected.imageUrl ? (
+                  <img src={selected.imageUrl} alt={selected.name} className="w-10 h-10 rounded-lg object-cover flex-shrink-0 border border-[#E5E0D8]" />
+                ) : (
+                  <div className="w-10 h-10 rounded-lg bg-[#16213E] flex items-center justify-center flex-shrink-0">
+                    <Dumbbell size={16} className="text-[#C9A84C]" />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-[#16213E] truncate">{selected.name}</p>
+                  <p className="text-xs text-[#9E998F]">{selected.category}{selected.muscleGroups?.length ? ` · ${selected.muscleGroups.slice(0, 2).join(', ')}` : ''}</p>
                 </div>
+                <button type="button" onClick={clearSelection} className="p-1.5 rounded-lg text-[#9E998F] hover:bg-[#E5E0D8] hover:text-[#16213E] transition-colors flex-shrink-0">
+                  <X size={15} />
+                </button>
               </div>
-            ) : null
-          })()}
+            ) : (
+              <div className="relative">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9E998F] pointer-events-none" />
+                <input
+                  ref={inputRef}
+                  value={search}
+                  onChange={(e) => { setSearch(e.target.value); setOpen(true) }}
+                  onFocus={() => setOpen(true)}
+                  onBlur={() => setTimeout(() => setOpen(false), 150)}
+                  placeholder="Search exercises..."
+                  className="w-full pl-9 pr-4 py-2.5 border border-[#E5E0D8] rounded-xl text-sm outline-none focus:border-[#C9A84C] focus:ring-2 focus:ring-[#C9A84C]/20 bg-white"
+                />
+                {open && (
+                  <div className="absolute z-10 mt-1 w-full bg-white border border-[#E5E0D8] rounded-xl shadow-lg max-h-52 overflow-y-auto">
+                    {filtered.length === 0 ? (
+                      <p className="px-4 py-3 text-sm text-[#9E998F]">No exercises found</p>
+                    ) : (
+                      filtered.map((ex) => (
+                        <button
+                          key={ex.id}
+                          type="button"
+                          onMouseDown={() => selectExercise(ex)}
+                          className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-[#F7F5F1] transition-colors text-left"
+                        >
+                          {ex.imageUrl ? (
+                            <img src={ex.imageUrl} alt={ex.name} className="w-8 h-8 rounded-lg object-cover flex-shrink-0 border border-[#E5E0D8]" />
+                          ) : (
+                            <div className="w-8 h-8 rounded-lg bg-[#F0EDE8] flex items-center justify-center flex-shrink-0">
+                              <Dumbbell size={13} className="text-[#9E998F]" />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-[#16213E] truncate">{ex.name}</p>
+                            <p className="text-xs text-[#9E998F]">{ex.category}</p>
+                          </div>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           <button
             type="button"
             onClick={() => setCreating(true)}

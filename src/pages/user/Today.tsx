@@ -491,6 +491,9 @@ export default function UserToday() {
 
                     return (
                       <div key={ex.id} className={`border rounded-2xl overflow-hidden transition-colors ${allDone ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-white'}`}>
+                        {ex.imageUrl && (
+                          <img src={ex.imageUrl} alt={ex.exerciseName} className="w-full h-28 object-cover" />
+                        )}
                         {/* Exercise header */}
                         <div className="flex items-start justify-between px-4 pt-3.5 pb-2">
                           <div>

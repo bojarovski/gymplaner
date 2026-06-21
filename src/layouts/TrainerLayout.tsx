@@ -13,7 +13,7 @@ export default function TrainerLayout() {
   return (
     <div className="flex min-h-screen bg-slate-100">
       <Sidebar items={navItems} title="Trainer" accentColor="#34D399" />
-      <main className="flex-1 overflow-auto pb-24 md:pb-0">
+      <main className="flex-1 overflow-y-auto overflow-x-hidden pb-24 md:pb-0">
         <Outlet />
       </main>
     </div>

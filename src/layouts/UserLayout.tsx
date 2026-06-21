@@ -14,7 +14,7 @@ export default function UserLayout() {
   return (
     <div className="flex min-h-screen bg-[#F7F5F1]">
       <Sidebar items={navItems} title="Member" accentColor="#60A5FA" />
-      <main className="flex-1 overflow-auto pb-24 md:pb-0">
+      <main className="flex-1 overflow-y-auto overflow-x-hidden pb-24 md:pb-0">
         <Outlet />
       </main>
     </div>
