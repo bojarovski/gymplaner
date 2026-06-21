@@ -141,7 +141,8 @@ export default function UserToday() {
       )
       const snap = await getDocs(q)
       if (snap.empty) return null
-      return { docId: snap.docs[0].id }
+      const d = snap.docs[0]
+      return { docId: d.id, exercises: (d.data().exercises ?? []) as { exerciseId: string; sets: { reps?: number; weight?: number; duration?: number; completed?: boolean }[] }[] }
     },
     enabled: !!user,
   })
@@ -185,19 +186,29 @@ export default function UserToday() {
 
   const isOverridden = !!(dayOverride && effectiveWorkoutDay?.id !== selectedWorkoutDay?.id)
 
-  // ── Init set tracking when effective day changes ─────────────────────────
+  // ── Init set tracking — prefer saved log, fall back to plan defaults ──────
   useEffect(() => {
     if (!effectiveWorkoutDay) return
     const init: ExTracking = {}
     ;(effectiveWorkoutDay.exercises ?? []).forEach((ex) => {
-      init[ex.id] = ex.sets.map((s) => ({
-        reps: s.reps != null ? String(s.reps) : s.duration != null ? String(s.duration) : '',
-        weight: String(s.weight ?? 0),
-        completed: false,
-      }))
+      const saved = workoutLog?.exercises?.find((e) => e.exerciseId === ex.exerciseId)
+      if (saved) {
+        init[ex.id] = saved.sets.map((s) => ({
+          reps: s.reps != null ? String(s.reps) : s.duration != null ? String(s.duration) : '',
+          weight: s.weight != null ? String(s.weight) : '0',
+          completed: s.completed ?? false,
+        }))
+      } else {
+        init[ex.id] = ex.sets.map((s) => ({
+          reps: s.reps != null ? String(s.reps) : s.duration != null ? String(s.duration) : '',
+          weight: String(s.weight ?? 0),
+          completed: false,
+        }))
+      }
     })
     setExTracking(init)
-  }, [effectiveWorkoutDay?.id])
+    setSavedExIds(new Set())
+  }, [effectiveWorkoutDay?.id, workoutLog?.docId])
 
   // ── Day meta ─────────────────────────────────────────────────────────────
   const dayMeta = useMemo(() => Array.from({ length: 7 }, (_, i) => {
